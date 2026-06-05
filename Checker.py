@@ -33,6 +33,4 @@ for server in servers:
     results = check_server(server)
     print(results)
 
-print()
-
 
