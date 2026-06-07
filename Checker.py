@@ -172,6 +172,7 @@ def send_alert(failed_services_list):
     sender = os.environ.get("EMAIL_USER")
     smtp_password = os.environ.get("EMAIL_PASS")
     receiver = os.environ.get("EMAIL_RECEIVER")
+    host = os.environ.get("HOST")
 
     if not sender or not smtp_password or not receiver:
         print("Alert skipped: Environment variables are completely empty.")
@@ -192,7 +193,7 @@ def send_alert(failed_services_list):
 
     try:
         print("Connecting to Gmail SMTP server...")
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        with smtplib.SMTP(host, 587) as server:
             server.starttls()
             server.login(sender, smtp_password)
             server.sendmail(sender, [receiver], msg.as_string())
