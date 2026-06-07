@@ -5,9 +5,11 @@ from concurrent.futures import ThreadPoolExecutor
 import smtplib
 from email.mime.text import MIMEText
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 failed_services = []
-
 
 
 # Feature 1: Load Servers
@@ -45,7 +47,6 @@ def check_server(url):
                 if "application/json" in response.headers.get("Content-Type", ""):
                     try:
                         json_data = response.json()
-                        # Explicit condition check rule: status == "ok"
                         if json_data.get("status") != "ok":
                             status_text = f"DOWN ({status_code})"
                     except ValueError:
@@ -78,7 +79,6 @@ def check_server(url):
                     "status_text": "DOWN"
                 }
 
-        # only wait and retry if not last attempt
         if attempt < max_attempts - 1:
             time.sleep(1)
     return None
@@ -86,6 +86,9 @@ def check_server(url):
 
 # Feature 7: Format Output
 def format_result(result):
+    if not result:
+        return "Unknown Service — Error tracking state"
+
     url = result["url"]
     status_text = result["status_text"]
     response_time = result["response_time"]
@@ -101,17 +104,24 @@ def format_result(result):
     elif "delay" in url:
         display_name = "cache.service.com" if status_text == "TIMEOUT" else "db.service.com"
 
-    if response_time and response_time > 500:
-        return f"{display_name:<18} — {status_text:<9} — {int(response_time)}ms  [slow]"
-    elif response_time:
-        return f"{display_name:<18} — {status_text:<9} — {int(response_time)}ms"
-    else:
-        return f"{display_name:<18} — {status_text}"
+    if response_time is not None:
+        try:
+            time_val = int(response_time)
+            if time_val > 500:
+                return f"{display_name:<18} — {status_text:<9} — {time_val}ms  [slow]"
+            return f"{display_name:<18} — {status_text:<9} — {time_val}ms"
+        except (ValueError, TypeError):
+            pass
+
+    return f"{display_name:<18} — {status_text}"
 
 
 # Feature 8: Save Failed Services
 def save_failed_service(result):
     global failed_services
+    if not result:
+        return
+
     status_text = result["status_text"]
 
     if status_text != "OK":
@@ -130,23 +140,26 @@ def save_failed_service(result):
         if display_name not in failed_services:
             failed_services.append(display_name)
 
-# Feature 11,12,13: Run All Servers
+
+# Feature 11,12: Run All Servers
 def check_all_servers():
     servers = load_servers()
     results = []
 
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=1) as executor:
         results = list(executor.map(check_server, servers))
 
     print()
 
     for result in results:
-        print(format_result(result))
-        save_failed_service(result)
+        try:
+            print(format_result(result))
+            save_failed_service(result)
+        except Exception as e:
+            print(f"Formatting error bypassed: {e}")
 
     print()
 
-    # Feature 8 final result
     if failed_services:
         print("Failed services: " + ", ".join(failed_services))
         send_alert(failed_services)
@@ -161,6 +174,7 @@ def send_alert(failed_services_list):
     receiver = os.environ.get("EMAIL_RECEIVER")
 
     if not sender or not smtp_password or not receiver:
+        print("Alert skipped: Environment variables are completely empty.")
         return
 
     payload = {
@@ -177,12 +191,14 @@ def send_alert(failed_services_list):
     msg["To"] = receiver
 
     try:
+        print("Connecting to Gmail SMTP server...")
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
             server.starttls()
             server.login(sender, smtp_password)
             server.sendmail(sender, [receiver], msg.as_string())
-    except Exception:
-        pass
+            print("Email dispatched successfully!")
+    except Exception as e:
+        print(f"SMTP Error encountered: {e}")
 
 
 if __name__ == "__main__":
