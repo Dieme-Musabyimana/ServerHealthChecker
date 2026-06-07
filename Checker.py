@@ -60,7 +60,6 @@ def check_server(url):
                 "status_text": status_text
             }
 
-        # Handle retries and connection timeouts
         except requests.exceptions.Timeout:
             if attempt == max_attempts - 1:
                 return {
