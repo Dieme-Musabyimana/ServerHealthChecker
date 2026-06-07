@@ -60,7 +60,7 @@ def check_server(url):
                 "status_text": status_text
             }
 
-        # Handle retries and connection timeouts cleanly without variable bleed
+        # Handle retries and connection timeouts
         except requests.exceptions.Timeout:
             if attempt == max_attempts - 1:
                 return {
@@ -115,7 +115,6 @@ def save_failed_service(result):
     global failed_services
     status_text = result["status_text"]
 
-    # If it is anything other than "OK", it's a failed service state
     if status_text != "OK":
         url = result["url"]
         display_name = url.replace("https://", "").replace("http://", "").split("/")[0]
@@ -137,13 +136,11 @@ def check_all_servers():
     servers = load_servers()
     results = []
 
-    # Map engine runs thread concurrently safely
     with ThreadPoolExecutor(max_workers=5) as executor:
         results = list(executor.map(check_server, servers))
 
     print()
 
-    # Iteration block updates global state sequentially on main thread safely
     for result in results:
         print(format_result(result))
         save_failed_service(result)
@@ -160,16 +157,13 @@ def check_all_servers():
 
 # Feature 13: Send Alerts
 def send_alert(failed_services_list):
-    # Retrieve configurations securely from PowerShell environment variables
     sender = os.environ.get("EMAIL_USER")
     smtp_password = os.environ.get("EMAIL_PASS")
     receiver = os.environ.get("EMAIL_RECEIVER")
 
-    # Halt notification pipeline if required credentials are unassigned
     if not sender or not smtp_password or not receiver:
         return
 
-    # Use JSON formatting to prepare the payload data structure
     payload = {
         "event": "SERVERS_OUTAGE_DETECTED",
         "timestamp": int(time.time()),
