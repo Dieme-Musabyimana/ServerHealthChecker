@@ -82,6 +82,7 @@ def check_server(url):
         # only wait and retry if not last attempt
         if attempt < max_attempts - 1:
             time.sleep(1)
+    return None
 
 
 # Feature 7: Format Output
@@ -159,17 +160,33 @@ def check_all_servers():
 
 # Feature 13: Send Alerts
 def send_alert(failed_services_list):
-    sender = "alert@checker.com"
-    receiver = "engeneers@gmail.com"
+    # Retrieve configurations securely from PowerShell environment variables
+    sender = os.environ.get("EMAIL_USER")
+    smtp_password = os.environ.get("EMAIL_PASS")
+    receiver = os.environ.get("EMAIL_RECEIVER")
 
-    body = f"The following services are down:\n\n" + "\n".join(failed_services_list)
+    # Halt notification pipeline if required credentials are unassigned
+    if not sender or not smtp_password or not receiver:
+        return
+
+    # Use JSON formatting to prepare the payload data structure
+    payload = {
+        "event": "SERVERS_OUTAGE_DETECTED",
+        "timestamp": int(time.time()),
+        "failed_services_count": len(failed_services_list),
+        "failed_services": failed_services_list
+    }
+
+    body = json.dumps(payload, indent=4)
     msg = MIMEText(body)
     msg["Subject"] = "ALERT: Server Health Checker Outage"
     msg["From"] = sender
     msg["To"] = receiver
 
     try:
-        with smtplib.SMTP("localhost", 1025) as server:
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(sender, smtp_password)
             server.sendmail(sender, [receiver], msg.as_string())
     except Exception:
         pass
